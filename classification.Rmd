@@ -79,6 +79,54 @@ RprtGmodel.party = as.party(RprtGmodel)
 RprtGmodel.party
 ```
 
+
+RFIMP FUNCTION
+```{r}
+rfimp.class = function(rffit,measure=1,horiz=T) {
+barplot(sort(rffit$importance[,measure]),horiz=horiz,xlab="Importance Measure",main="Variable Importance")
+}
+
+```
+
+
+GENERIC MISCLASS FUNCTION
+
+```{r}
+misclass = function(fit,y) {
+  temp <- table(fit,y)
+  cat("Table of Misclassification\n")
+  cat("(row = predicted, col = actual)\n")
+  print(temp)
+  cat("\n\n")
+  numcor <- sum(diag(temp))
+  numinc <- length(y) - numcor
+  mcr <- numinc/length(y)
+  cat(paste("Misclassification Rate = ",format(mcr,digits=3)))
+  cat("\n")
+}
+
+```
+
+
+MISCLASS.RPART FUNCTION
+```{r}
+misclass.rpart = function (tree) 
+{
+    temp <- table(predict(tree, type = "class"), tree$y)
+    cat("Table of Misclassification\n")
+    cat("(row = predicted, col = actual)\n")
+    print(temp)
+    cat("\n\n")
+    numcor <- sum(diag(temp))
+    numinc <- length(tree$y) - numcor
+    mcr <- numinc/length(tree$y)
+    cat(paste("Misclassification Rate = ", format(mcr,digits = 3)))
+    cat("\n")
+}
+
+```
+
+
 MISCLASSIFICATION OF THE TRAIN SET
 ```{r}
 misclass.rpart(RprtGmodel)
