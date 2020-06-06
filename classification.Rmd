@@ -1,0 +1,293 @@
+---
+title:"Classification-Trees-Bagged-Classification-Trees-Random-Forests-and-Boosted-Trees-Rstudio"
+author: "Masha"
+date: "6/4/2020"
+output:  
+   md_document:
+    variant: markdown_github
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(knitr)
+#library(ggplot2)
+knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_knit$set(root.dir= normalizePath('..'))
+knitr::opts_chunk$set(error = FALSE)
+```
+
+Description from UCI Machine Learning database: The database consists of the multi-spectral values of pixels in 3x3 neighborhoods in a satellite image, and the classification associated with the central pixel in each neighborhood. The aim is to predict this classification, given the multi-spectral values. In the sample database, the class of a pixel is coded as a number.
+
+The Landsat satellite data is one of the many sources of information available for a scene. The interpretation of a scene by integrating spatial data of diverse types and resolutions including multispectral and radar data, maps indicating topography, land use etc. is expected to assume significant importance with the onset of an era characterized by integrative approaches to remote sensing (for example, NASA's Earth Observing System commencing this decade). Existing statistical methods are illequipped for handling such diverse data types. Note that this is not true for Landsat MSS data considered in isolation (as in this sample database). This data satisfies the important requirements of being numerical and at a single resolution, and standard maximum-likelihood classification performs very well. Consequently, for this data, it should be interesting to compare the performance of other methods against the statistical approach.
+
+One frame of Landsat MSS imagery consists of four digital images of the same scene in different spectral bands. Two of these are in the visible region (corresponding approximately to green and red regions of the visible spectrum) and two are in the (near) infra-red. Each pixel is a 8-bit binary word, with 0 corresponding to black and 255 to white. The spatial resolution of a pixel is about 80m x 80m. Each image contains 2340 x 3380 such pixels.
+
+The database is a (tiny) sub-area of a scene, consisting of 82 x 100 pixels. Each line of data corresponds to a 3x3 square neighborhood of pixels completely contained within the 82x100 sub-area. Each line contains the pixel values in the four spectral bands (converted to ASCII) of each of the 9 pixels in the 3x3 neighborhood and a number indicating the classification label of the central pixel. The number is a code for the following classes: Number Class 1 red soil 2 cotton crop 3 grey soil 4 damp grey soil 5 soil with vegetation stubble 6 mixture class (all types present) 7 very damp grey soil Note: There are no examples with class 6 in this dataset
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+LIBRARIES NEEDED
+```{r}
+library(ada)
+library(adabag)
+library(mboost)
+library(kknn)
+library(class)
+library(klaR)
+library(e1071)
+library(rpart)
+library(partykit)
+library(ipred)
+library(randomForest)
+```
+
+DATA
+```{r}
+Gtrain = read.csv("C:/Users/fb8502oa/Desktop/Github stuff/Classification-Trees-Bagged-Classification-Trees-Random-Forests-and-Boosted-Trees-Rstudio-/Gtrain.csv")
+
+Gtest = read.csv("C:/Users/fb8502oa/Desktop/Github stuff/Classification-Trees-Bagged-Classification-Trees-Random-Forests-and-Boosted-Trees-Rstudio-/Gtest.csv")
+```
+
+TRAIN AND TEST SET
+```{r}
+set.seed(1)
+sam = sample(1:8000,5000,replace=F)
+G.train = Gtrain[sam,]
+G.valid = Gtrain[-sam,]
+```
+
+
+Compare CART/RPART, bagged CART/RPART, Random Forest classification, and Boosted
+Trees in the classification of the test cases. Which method performs best for these data? Be
+sure to adjust the various tuning parameters to optimize the performance of these methods
+for this prediction problem.
+
+1. CART/ RPART MODEL
+```{r}
+RprtGmodel = rpart(GENRE~., data = G.train)
+RprtGmodel
+```
+
+```{r}
+RprtGmodel.party = as.party(RprtGmodel)
+RprtGmodel.party
+```
+
+MISCLASSIFICATION OF THE TRAIN SET
+```{r}
+misclass.rpart(RprtGmodel)
+```
+
+MISCLASSIFICATION OF THE TEST SET
+```{r}
+RprtGmodeltest = rpart(GENRE~., data = G.valid)
+misclass.rpart(RprtGmodeltest)
+```
+
+IMPORTANCE OF VARIBALE
+```{r}
+printcp(RprtGmodel)
+```
+
+
+USING EQUAL PRIORS SO THAT THEY ARE WEIGHTED THE SAME.
+MISCLASSIFICATION OF TRAIN SET
+```{r}
+RprtGmodel2 = rpart(GENRE~.,data=G.train, parms=list(prior=c(1,1,1,1,1,1)/6))
+misclass.rpart(RprtGmodel2)
+```
+
+OPTIMUM CP
+```{r}
+plotcp(RprtGmodel)
+```
+
+WITH MORE rpartsettings.
+```{r}
+RprtGmodel3 = rpart(GENRE~.,data=G.train, cp= 0.01000, minbucket = 2)
+misclass.rpart(RprtGmodel3)
+```
+
+
+MODEL WITH CROSS_VALIDATION
+```{r}
+crpart.sscv = function(fit,y,data,B=25,p=.333) {
+n = length(y)
+cv <- rep(0,B)
+for (i in 1:B) {
+       ss <- floor(n*p)
+       sam <- sample(1:n,ss)
+       temp <- data[-sam,]
+       fit2 <- rpart(formula(fit),data=temp,parms=fit$parms,control=fit$control)
+       ynew <- predict(fit2,newdata=data[sam,],type="class")
+       tab <- table(y[sam],ynew)
+       mc <- ss - sum(diag(tab))
+      cv[i] <- mc/ss
+      }
+   cv
+}
+```
+
+
+TRYING TO OVERFIT
+```{r}
+#overfit with the training set.
+RprtGmodel4 = rpart(GENRE~., data = G.train,control = rpart.control(minsplit = 3, cp = 0.010000))
+resultsG4 = crpart.sscv(RprtGmodel4,G.train$GENRE, data = G.train, B= 200)
+resultsG4
+```
+
+```{r}
+summary(resultsG4)
+```
+
+
+```{r}
+resultsGv4 = crpart.sscv(RprtGmodel4,G.valid$GENRE, data = G.valid, B= 200)
+resultsGv4
+summary(resultsGv4)
+```
+
+SUMMARY:
+After dividing the data into a training and test set, I started by fitting a base
+model to set the misclassification error of the model as the guide on how other
+models should perform. The base model had a misclassification rate of 0.235 on its
+training set and a misclassification rate of 0.251 on the test set. I tried using cross
+validation and an optimal cp of 0.0100 for the base model, but it performed poorly with a misclassification rate
+of 0.2483 on the training and 0.2692 on the test set.
+
+
+
+
+BAGGING MODEL
+```{r}
+BagGmodel = bagging(GENRE~., data = G.train, coob= T)
+BagGmodel
+```
+
+MISCLASSIFICATION
+```{r}
+misclass(predict(BagGmodel,newdata = G.train), G.train$GENRE)
+
+```
+
+```{r}
+misclass(predict(BagGmodel,newdata = G.valid), G.valid$GENRE)
+```
+
+SUMMARY:
+Bagging had a better performance than the models in classification. The model had
+25 bootstraps replications and had an out-bag estimate misclassification error or
+a training misclassification0.0002  and a test misclassification
+rate of 0.105
+
+
+
+
+RANDOM FOREST MODEL
+```{r}
+RndGmodel = randomForest(GENRE~., data = G.train, mtry = 12, importance= T, cp =0.01)
+RndGmodel
+```
+
+```{r}
+yhat = predict(RndGmodel, newdata = G.valid)
+misclass(yhat, G.valid$GENRE)
+```
+
+```{r}
+RndGmodel2 = randomForest(GENRE~., data = G.train, mtry = 13, importance= T, cp = 0.01)
+RndGmodel2
+```
+
+```{r}
+yhatR = predict(RndGmodel2, newdata = G.valid)
+misclass(yhatR, G.valid$GENRE)
+```
+
+
+```{r}
+RndGmodel$importance
+```
+
+```{r}
+rfimp.class = function(rffit,measure=1,horiz=T) {
+barplot(sort(rffit$importance[,measure]),horiz=horiz,xlab="Importance Measure",main="Variable Importance")
+}
+```
+
+
+
+```{r}
+rfimp.class(RndGmodel, measure = 1, horiz = F)
+```
+
+```{r}
+rfimp.class(RndGmodel, measure = 2, horiz = F)
+```
+
+SUMMARY:
+In search for the best model, I tried several random forest models and the best model performed better
+than all the other models. I improved the model by increasing the number of mtry =12 and a cp of 0.01. This helped in its
+performance and had a misclassification rate of 0.0807. 
+
+
+
+BOOSTING MODEL
+```{r}
+BstGmodel = boosting(GENRE~., data = G.train, mfinal = 200, cp = 0.01)
+summary(BstGmodel)
+```
+
+```{r}
+barplot(sort(BstGmodel$importance), main = "variable importance")
+```
+
+```{r}
+misclass(BstGmodel$class, G.train$GENRE)
+```
+
+```{r}
+#using the sets 
+yhat= predict(BstGmodel, newdata = G.valid)
+summary(yhat)
+```
+
+```{r}
+head(yhat$votes)
+```
+
+```{r}
+head(yhat$class)
+```
+
+```{r}
+yhat$confusion
+```
+
+```{r}
+yhat$error
+```
+
+```{r}
+misclass(yhat$class, G.valid$GENRE)
+```
+SUMMARY:
+Bosting is by far the best model with a training error or 0.0032 and a misclassification error or 0.079 on the testing set
+
+this is the model that i will use to give the prediction csv.
+
+
+```{r}
+yhat= predict(BstGmodel, newdata = G.valid)
+submission = data.frame(ypred=yhatR)
+write.csv(submission, file = "Music_Genre_Predictions.csv")
+```
+
+Thanks.
